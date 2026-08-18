@@ -103,10 +103,7 @@ def extract_text_response(agent_output: dict) -> str:
     if not isinstance(agent_output, dict):
         return str(agent_output)
 
-    # Case 1: top-level messages (normal final state)
     messages = agent_output.get("messages")
-
-    # Case 2: nested under a node name, e.g. {"model": {"messages": [...]}}
     if messages is None:
         for value in agent_output.values():
             if isinstance(value, dict) and "messages" in value:
@@ -128,6 +125,16 @@ formatted_agent_chain = (
 
 # --- 3. FastAPI App ---
 app = FastAPI(title="Indian Weather and Cinema Agent")
+
+
+@app.get("/")
+def health_check():
+    return {
+        "status": "online",
+        "playground": "/agent/playground/",
+        "docs": "/docs",
+    }
+
 
 add_routes(app, formatted_agent_chain, path="/agent", playground_type="default")
 
