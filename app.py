@@ -83,7 +83,7 @@ agent = create_agent(
         "respond directly with the exact output returned by the tool. "
         "For any other roles, topics, questions, or general knowledge outside of Indian weather and movies, "
         "you must say exactly: 'I am not authorized to answer questions outside of Indian weather and cinema.'"
-    ),
+    )
 )
 
 class AgentInput(BaseModel):
