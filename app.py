@@ -1,14 +1,15 @@
+import json
 import os
+import requests
 import uvicorn
 from fastapi import FastAPI
-from langserve import add_routes
+from langchain.agents import create_agent
+from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import create_agent
-import requests
-import json
+from langserve import add_routes
 from pydantic import BaseModel, Field
-from langchain_core.runnables import RunnableLambda
+
 
 # --- 1. Define Tools ---
 @tool
@@ -22,8 +23,9 @@ def search_movies(genre: str) -> str:
     clean_genre = genre.lower().strip()
     return movies.get(
         clean_genre,
-        f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}."
+        f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}.",
     )
+
 
 @tool
 def change_to_f(temp_c: float) -> float:
@@ -37,8 +39,10 @@ def get_weather(city: str) -> str:
     geo_url = "https://geocoding-api.open-meteo.com/v1/search"
     geo_params = {"name": city, "count": 1}
     geo_response = requests.get(geo_url, params=geo_params).json()
+
     if "results" not in geo_response:
         return f"Could not find weather data for city: {city}"
+
     location = geo_response["results"][0]
     latitude = location["latitude"]
     longitude = location["longitude"]
@@ -48,27 +52,29 @@ def get_weather(city: str) -> str:
         "latitude": latitude,
         "longitude": longitude,
         "current": "temperature_2m,weather_code",
-        "temperature_unit": "celsius"
+        "temperature_unit": "celsius",
     }
-    weather_response = requests.get(weather_url, params=weather_params).json()["current"]
+    weather_response = requests.get(weather_url, params=weather_params).json()[
+        "current"
+    ]
 
     result = {
         "resolved_city": location["name"],
         "temperature_celsius": weather_response["temperature_2m"],
-        "weather_code": weather_response["weather_code"]
+        "weather_code": weather_response["weather_code"],
     }
     return json.dumps(result)
 
-tools = [get_weather, search_movies, change__to_f]
+
+tools = [get_weather, search_movies, change_to_f]
 
 # --- 2. Initialize Model & Agent ---
-# Retrieve the key from the OS environment instead of Colab's userdata
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get(
+    "GOOGLE_API_KEY"
+)
 
 llm_flash = ChatGoogleGenerativeAI(
-    model="gemma-4-31b-it",
-    api_key=GEMINI_API_KEY,
-    temperature=0
+    model="gemini-1.5-flash", api_key=GEMINI_API_KEY, temperature=0
 )
 
 agent = create_agent(
@@ -80,8 +86,9 @@ agent = create_agent(
         "respond directly with the exact output returned by the tool. "
         "For any other roles, topics, questions, or general knowledge outside of Indian weather and movies, "
         "you must say exactly: 'I am not authorized to answer questions outside of Indian weather and cinema.'"
-    )
+    ),
 )
+
 
 class AgentInput(BaseModel):
     input: str = Field(description="Your message to the agent")
@@ -90,6 +97,7 @@ class AgentInput(BaseModel):
 def format_for_agent(x) -> dict:
     user_input = x["input"] if isinstance(x, dict) else x.input
     return {"messages": [("user", user_input)]}
+
 
 def extract_text_response(agent_output: dict) -> str:
     if not isinstance(agent_output, dict):
@@ -111,6 +119,7 @@ def extract_text_response(agent_output: dict) -> str:
 
     return str(agent_output)
 
+
 formatted_agent_chain = (
     RunnableLambda(format_for_agent)
     | agent
@@ -118,13 +127,9 @@ formatted_agent_chain = (
 ).with_types(input_type=AgentInput, output_type=str)
 
 # --- 3. FastAPI App ---
-##Need To Code
-app = FastAPI(title ="Indian Weather and Cinema Agenr")
-add_routes(app,
-           formatted_agent_chain,
-           path ="/agent",
-           playground_type = "default")
+app = FastAPI(title="Indian Weather and Cinema Agent")
 
+add_routes(app, formatted_agent_chain, path="/agent", playground_type="default")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
