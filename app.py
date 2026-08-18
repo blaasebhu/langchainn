@@ -12,13 +12,19 @@ from langchain_core.runnables import RunnableLambda
 
 # --- 1. Define Tools ---
 @tool
+@tool
 def search_movies(genre: str) -> str:
     """Search for Indian movies by genre."""
     movies = {
         "sci-fi": "Cargo, 2.0, Mr. India",
         "comedy": "3 Idiots, Hera Pheri, Munna Bhai M.B.B.S.",
-        "action": "RRR, Vikram, Baahubali"
+        "action": "RRR, Vikram, Baahubali",
     }
+    clean_genre = genre.lower().strip()
+    return movies.get(
+        clean_genre,
+        f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}."
+    )
     return movies.get(genre.lower(), "No movies found for that genre")
 
 
@@ -73,9 +79,11 @@ agent = create_agent(
     tools=tools,
     system_prompt=(
         "You are a specialized agent restricted ONLY to Indian weather and cinema. "
+        "When a user asks for a movie genre that is missing or not found by the search_movies tool, "
+        "respond directly with the exact output returned by the tool. "
         "For any other roles, topics, questions, or general knowledge outside of Indian weather and movies, "
         "you must say exactly: 'I am not authorized to answer questions outside of Indian weather and cinema.'"
-    )
+    ),
 )
 
 class AgentInput(BaseModel):
