@@ -1,15 +1,14 @@
-import json
 import os
-import requests
 import uvicorn
 from fastapi import FastAPI
-from langchain.agents import create_agent
-from langchain_core.runnables import RunnableLambda
+from langserve import add_routes
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langserve import add_routes
+from langchain.agents import create_agent
+import requests
+import json
 from pydantic import BaseModel, Field
-
+from langchain_core.runnables import RunnableLambda
 
 # --- 1. Define Tools ---
 @tool
@@ -18,19 +17,15 @@ def search_movies(genre: str) -> str:
     movies = {
         "sci-fi": "Cargo, 2.0, Mr. India",
         "comedy": "3 Idiots, Hera Pheri, Munna Bhai M.B.B.S.",
-        "action": "RRR, Vikram, Baahubali",
+        "action": "RRR, Vikram, Baahubali"
     }
-    clean_genre = genre.lower().strip()
-    return movies.get(
-        clean_genre,
-        f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}.",
-    )
+    return movies.get(genre.lower(), "No movies found for that genre")
 
 
 @tool
-def change_to_f(temp_c: float) -> float:
-    """Converts the Celsius temperature to Fahrenheit temperature."""
-    return temp_c * 1.8 + 32
+def change__to_f(temp_c: float) -> float:
+  """converts the cel temp to F temperature"""
+  return temp_c * (1.8) + 32
 
 
 @tool
@@ -39,10 +34,8 @@ def get_weather(city: str) -> str:
     geo_url = "https://geocoding-api.open-meteo.com/v1/search"
     geo_params = {"name": city, "count": 1}
     geo_response = requests.get(geo_url, params=geo_params).json()
-
     if "results" not in geo_response:
         return f"Could not find weather data for city: {city}"
-
     location = geo_response["results"][0]
     latitude = location["latitude"]
     longitude = location["longitude"]
@@ -52,29 +45,27 @@ def get_weather(city: str) -> str:
         "latitude": latitude,
         "longitude": longitude,
         "current": "temperature_2m,weather_code",
-        "temperature_unit": "celsius",
+        "temperature_unit": "celsius"
     }
-    weather_response = requests.get(weather_url, params=weather_params).json()[
-        "current"
-    ]
+    weather_response = requests.get(weather_url, params=weather_params).json()["current"]
 
     result = {
         "resolved_city": location["name"],
         "temperature_celsius": weather_response["temperature_2m"],
-        "weather_code": weather_response["weather_code"],
+        "weather_code": weather_response["weather_code"]
     }
     return json.dumps(result)
 
-
-tools = [get_weather, search_movies, change_to_f]
+tools = [get_weather, search_movies, change__to_f]
 
 # --- 2. Initialize Model & Agent ---
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get(
-    "GOOGLE_API_KEY"
-)
+# Retrieve the key from the OS environment instead of Colab's userdata
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 llm_flash = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", api_key=GEMINI_API_KEY, temperature=0
+    model="gemma-4-31b-it",
+    api_key=GEMINI_API_KEY,
+    temperature=0
 )
 
 agent = create_agent(
@@ -82,13 +73,10 @@ agent = create_agent(
     tools=tools,
     system_prompt=(
         "You are a specialized agent restricted ONLY to Indian weather and cinema. "
-        "When a user asks for a movie genre that is missing or not found by the search_movies tool, "
-        "respond directly with the exact output returned by the tool. "
         "For any other roles, topics, questions, or general knowledge outside of Indian weather and movies, "
         "you must say exactly: 'I am not authorized to answer questions outside of Indian weather and cinema.'"
-    ),
+    )
 )
-
 
 class AgentInput(BaseModel):
     input: str = Field(description="Your message to the agent")
@@ -98,12 +86,14 @@ def format_for_agent(x) -> dict:
     user_input = x["input"] if isinstance(x, dict) else x.input
     return {"messages": [("user", user_input)]}
 
-
 def extract_text_response(agent_output: dict) -> str:
     if not isinstance(agent_output, dict):
         return str(agent_output)
 
+    # Case 1: top-level messages (normal final state)
     messages = agent_output.get("messages")
+
+    # Case 2: nested under a node name, e.g. {"model": {"messages": [...]}}
     if messages is None:
         for value in agent_output.values():
             if isinstance(value, dict) and "messages" in value:
@@ -116,7 +106,6 @@ def extract_text_response(agent_output: dict) -> str:
 
     return str(agent_output)
 
-
 formatted_agent_chain = (
     RunnableLambda(format_for_agent)
     | agent
@@ -124,19 +113,13 @@ formatted_agent_chain = (
 ).with_types(input_type=AgentInput, output_type=str)
 
 # --- 3. FastAPI App ---
-app = FastAPI(title="Indian Weather and Cinema Agent")
+##Need To Code
+app = FastAPI(title ="Indian Weather and Cinema Agenr")
+add_routes(app,
+           formatted_agent_chain,
+           path ="/agent",
+           playground_type = "default")
 
-
-@app.get("/")
-def health_check():
-    return {
-        "status": "online",
-        "playground": "/agent/playground/",
-        "docs": "/docs",
-    }
-
-
-add_routes(app, formatted_agent_chain, path="/agent", playground_type="default")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
