@@ -23,11 +23,12 @@ def search_movies(genre: str) -> str:
     return movies.get(
         clean_genre,
         f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}."
+    )
 
 @tool
-def change__to_f(temp_c: float) -> float:
-  """converts the cel temp to F temperature"""
-  return temp_c * (1.8) + 32
+def change_to_f(temp_c: float) -> float:
+    """Converts the Celsius temperature to Fahrenheit temperature."""
+    return temp_c * 1.8 + 32
 
 
 @tool
