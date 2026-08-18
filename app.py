@@ -12,7 +12,6 @@ from langchain_core.runnables import RunnableLambda
 
 # --- 1. Define Tools ---
 @tool
-@tool
 def search_movies(genre: str) -> str:
     """Search for Indian movies by genre."""
     movies = {
@@ -24,9 +23,6 @@ def search_movies(genre: str) -> str:
     return movies.get(
         clean_genre,
         f"{genre} movies is not my genre. {genre} movies are not in my database so i cant provide a suggestion for {genre}."
-    )
-    return movies.get(genre.lower(), "No movies found for that genre")
-
 
 @tool
 def change__to_f(temp_c: float) -> float:
